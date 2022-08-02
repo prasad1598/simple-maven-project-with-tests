@@ -16,7 +16,7 @@ pipeline {
                 stage('Building') {
                     steps {
                         
-                        sh "mvn clean install  |  tee output.log"
+                        sh "mvn deploy |  tee output.log"
 
                         sh '! grep "WARNING" output.log'
 
