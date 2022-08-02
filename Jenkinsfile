@@ -1,34 +1,61 @@
-pipeline {
-    agent any
-    environment {
-        BUILD_COMPLETE = false
-    }
-    stages {
-        stage('Build') {
-            failFast true
-            parallel {
-                stage('Building') {
-                    steps {
-                        
-                        sh "mvn clean install  |  tee output.log"
+pipeline{
+        agent any  
+        environment{
+	    Docker_tag = getDockerTag()
+        }
+        
+        stages{
 
-                        sh '! grep "WARNING" output.log'
+              stage('Quality Gate Statuc Check'){
 
-                        script {
-                            BUILD_COMPLETE = true
-                        }
-                    }
-                }
-                stage('Monitoring the logs') {
-                    steps {
-                        script {
-                            while (BUILD_COMPLETE != true) {
-                                sh '! grep "WARNING" output.log'
-                            }
-                        }
-                    }
+               agent {
+                docker {
+                image 'maven'
+                args '-v $HOME/.m2:/root/.m2'
                 }
             }
-        }
-    }
+                  steps{
+                      script{
+                      withSonarQubeEnv('sonarserver') { 
+                      sh "mvn sonar:sonar"
+                       }
+                      timeout(time: 1, unit: 'HOURS') {
+                      def qg = waitForQualityGate()
+                      if (qg.status != 'OK') {
+                           error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                      }
+                    }
+		    sh "mvn clean install"
+                  }
+                }  
+              }
+
+              stage('build')
+                {
+              steps{
+                  script{
+		 sh 'cp -r ../devops-training@2/target .'
+                   sh 'docker build . -t deekshithsn/devops-training:$Docker_tag'
+		   withCredentials([string(credentialsId: 'docker_password', variable: 'docker_password')]) {
+				    
+				  sh 'docker login -u deekshithsn -p $docker_password'
+				  sh 'docker push deekshithsn/devops-training:$Docker_tag'
+			}
+                       }
+                    }
+                 }
+		 
+		stage('ansible playbook'){
+			steps{
+			 	script{
+				    sh '''final_tag=$(echo $Docker_tag | tr -d ' ')
+				     echo ${final_tag}test
+				     sed -i "s/docker_tag/$final_tag/g"  deployment.yaml
+				     '''
+				    ansiblePlaybook become: true, installation: 'ansible', inventory: 'hosts', playbook: 'ansible.yaml'
+				}
+			}
+		}
+		
+	}
 }
