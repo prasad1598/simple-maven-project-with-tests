@@ -1,7 +1,7 @@
 # simple-maven-project-with-tests
 
-# Build instuction
+#Build instuction
 mvn3 clean install
 
-# Deploy instuction
+#Deploy instuction
 deploy target/webapp.wer on tomcat
